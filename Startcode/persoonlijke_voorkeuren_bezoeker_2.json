@@ -1,0 +1,17 @@
+{
+    "metadata": {
+        "aanmeldzuil_id": 15,
+        "transactie_id": 2155,
+        "datum_tijd": ["22-8-2024", "15:07"]
+    },
+    "naam": "Ahmed Bonfaqih",
+    "gender": "M",
+    "leeftijd": 32,
+    "lengte": 180,
+    "gewicht": 140,
+    "verblijfsduur": 120,
+    "voorkeuren_attractietypes": ["Familie", "Draaien"],
+    "voorkeuren_eten": ["Pasta", "Patat", "IJs"],
+    "lievelings_attracties": ["Family Carousel"],
+    "rekening_houden_met_weer": false
+}

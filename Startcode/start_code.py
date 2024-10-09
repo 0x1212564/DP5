@@ -118,17 +118,17 @@ class VoorkeurenWindow(QWidget):
 
         eten_voorkeuren = []
         if self.checkbox_snoep.isChecked():
-            eten_voorkeuren.append("Snoep, ")
+            eten_voorkeuren.append("Snoep ")
         if self.checkbox_patat.isChecked():
-            eten_voorkeuren.append("Patat, ")
+            eten_voorkeuren.append("Patat ")
         if self.checkbox_ijs.isChecked():
-            eten_voorkeuren.append("Ijs, ")
+            eten_voorkeuren.append("Ijs ")
         if self.checkbox_pizza.isChecked():
-            eten_voorkeuren.append("Pizza, ")
+            eten_voorkeuren.append("Pizza ")
         if self.checkbox_pasta.isChecked():
-            eten_voorkeuren.append("Pasta, ")
+            eten_voorkeuren.append("Pasta ")
         if self.checkbox_pannenkoeken.isChecked():
-            eten_voorkeuren.append("Pannenkoeken, ")
+            eten_voorkeuren.append("Pannenkoeken ")
 
         return {
             "naam": self.naam_entry.text(),

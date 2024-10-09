@@ -150,7 +150,7 @@ class VoorkeurenWindow(QWidget):
 
         # Maak query met filters voor lengte, leeftijd, en eventueel overdekte attracties als het weer een rol speelt
         query = """
-            SELECT naam, type, geschatte_wachttijd, doorlooptijd
+            SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_max_gewicht, attractie_min_leeftijd
             FROM voorziening 
             WHERE type = %s
             AND actief = 1  
@@ -214,7 +214,11 @@ class VoorkeurenWindow(QWidget):
                     "attractie_naam": attractie['naam'],  # Change here
                     "type": attractie['type'],  # Change here
                     "geschatte_wachttijd": attractie['geschatte_wachttijd'],  # Change here
-                    "doorlooptijd": attractie['doorlooptijd']  # Change here
+                    "doorlooptijd": attractie['doorlooptijd'],  # Change here
+                    "attractie_min_lengte": attractie['attractie_min_lengte'],
+                    "attractie_max_lengte": attractie['attractie_max_lengte'],
+                    "attractie_max_gewicht": attractie['attractie_max_gewicht'],
+                    "attractie_min_leeftijd": attractie['attractie_min_leeftijd'],
                 } for attractie in attracties
             ],
             "metadata": {

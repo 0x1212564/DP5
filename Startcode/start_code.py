@@ -9,16 +9,6 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QPushButt
 
 from database_wrapper import Database
 
-
-# Functie om voorzieningen uit de database op te halen
-def overzicht_attracties():
-    db.connect()
-    select_query = "SELECT naam, type FROM voorziening"
-    results = db.execute_query(select_query)
-    db.close()
-    return results
-
-
 # Maakt connectie met de database
 db = Database(host="localhost", gebruiker="user", wachtwoord="password", database="attractiepark_software")
 
@@ -147,19 +137,35 @@ class VoorkeurenWindow(QWidget):
         }
 
     def haal_weer_op(self):
-        api_url = "http://api.openweathermap.org/data/2.5/weather"
-        params = {
-            'q': 'Amsterdam',  # Verander naar locatie van attractiepark
-            'appid': 'YOUR_API_KEY',  # Vervang door een geldige API-sleutel
-            'units': 'metric'
-        }
-        response = requests.get(api_url, params=params)
-        if response.status_code == 200:
-            data = response.json()
-            temperatuur = data['main']['temp']
-            regent = 'rain' in data['weather'][0]['main'].lower()
+        """
+        Haalt de temperatuur en neerslagstatus op via de OpenWeatherMap API.
+
+        Parameters:
+        - stad (str): De naam van de stad waarvoor je het weer wilt ophalen.
+        - api_key (str): Jouw OpenWeatherMap API-sleutel.
+
+        Returns:
+        - temperatuur (float): De huidige temperatuur in graden Celsius.
+        - regent (bool): True als het regent, anders False.
+        """
+
+        # API URL voor huidige weersinformatie op basis van stad
+        api_url = "https://api.openweathermap.org/data/2.5/weather?q=Amsterdam,uk&APPID=a71b7d54c15964ca3068d3a856b2f399"
+
+        try:
+            response = requests.get(api_url)
+            weer_data = response.json()
+
+            # Haal de huidige temperatuur op
+            temperatuur = weer_data['main']['temp']
+
+            # Controleer of er regen is
+            regent = 'rain' in weer_data
+
             return temperatuur, regent
-        else:
+
+        except Exception as e:
+            print(f"Fout bij het ophalen van de weerdata: {e}")
             return None, None
 
     def generate_day_program(self):
@@ -167,7 +173,6 @@ class VoorkeurenWindow(QWidget):
         data = self.get_IOdata()
         db.connect()
 
-        # Weer informatie ophalen: temperatuur en regenstatus
         temperatuur, regent = self.haal_weer_op()
 
         verblijfsduur = int(data["verblijfsduur"])  # in minuten
@@ -321,7 +326,7 @@ class VoorkeurenWindow(QWidget):
     def opslaan(self):
         data = self.get_IOdata()
 
-        if not self.naam_entry.text() or not self.gender_entry.currentText() or not self.leeftijd_entry.text() or not self.lengte_entry.text() or not self.gewicht_entry.text():
+        if not data["naam"] or not data["gender"] or not data["leeftijd"] or not data["lengte"] or not data["gewicht"] or not data["verblijfsduur"] or not data["attractie_voorkeuren"] or not data["eten_voorkeuren"] or not data["lievelings_attracties"]:
             QMessageBox.warning(self, "Fout", "Er mogen geen lege velden zijn")
             return
 
@@ -362,6 +367,7 @@ class VoorkeurenWindow(QWidget):
                     "attractie_max_lengte": attractie['attractie_max_lengte'],
                     "attractie_max_gewicht": attractie['attractie_max_gewicht'],
                     "attractie_min_leeftijd": attractie['attractie_min_leeftijd'],
+                    "productaanbod": attractie['productaanbod'],
                 } for attractie in attracties
             ],
             "metadata": {

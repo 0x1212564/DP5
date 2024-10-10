@@ -1,20 +1,13 @@
-import sys
 import json
-from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QVBoxLayout, QPushButton, QMessageBox, QComboBox,
-                             QGridLayout, QCheckBox)
-from pathlib import Path
-from database_wrapper import Database
+import sys
 from datetime import datetime
+from pathlib import Path
 
+import requests
+from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QPushButton, QMessageBox, QComboBox,
+                             QGridLayout, QCheckBox)
 
-# Functie om voorzieningen uit de database op te halen
-def overzicht_attracties():
-    db.connect()
-    select_query = "SELECT naam, type FROM voorziening"
-    results = db.execute_query(select_query)
-    db.close()
-    return results
-
+from database_wrapper import Database
 
 # Maakt connectie met de database
 db = Database(host="localhost", gebruiker="user", wachtwoord="password", database="attractiepark_software")
@@ -118,17 +111,17 @@ class VoorkeurenWindow(QWidget):
 
         eten_voorkeuren = []
         if self.checkbox_snoep.isChecked():
-            eten_voorkeuren.append("Snoep, ")
+            eten_voorkeuren.append("Snoep ")
         if self.checkbox_patat.isChecked():
-            eten_voorkeuren.append("Patat, ")
+            eten_voorkeuren.append("Patat ")
         if self.checkbox_ijs.isChecked():
-            eten_voorkeuren.append("Ijs, ")
+            eten_voorkeuren.append("Ijs ")
         if self.checkbox_pizza.isChecked():
-            eten_voorkeuren.append("Pizza, ")
+            eten_voorkeuren.append("Pizza ")
         if self.checkbox_pasta.isChecked():
-            eten_voorkeuren.append("Pasta, ")
+            eten_voorkeuren.append("Pasta ")
         if self.checkbox_pannenkoeken.isChecked():
-            eten_voorkeuren.append("Pannenkoeken, ")
+            eten_voorkeuren.append("Pannenkoeken ")
 
         return {
             "naam": self.naam_entry.text(),
@@ -143,42 +136,197 @@ class VoorkeurenWindow(QWidget):
             "weer": self.weer_entry.currentText(),
         }
 
+    def haal_weer_op(self):
+        """
+        Haalt de temperatuur en neerslagstatus op via de OpenWeatherMap API.
+
+        Parameters:
+        - stad (str): De naam van de stad waarvoor je het weer wilt ophalen.
+        - api_key (str): Jouw OpenWeatherMap API-sleutel.
+
+        Returns:
+        - temperatuur (float): De huidige temperatuur in graden Celsius.
+        - regent (bool): True als het regent, anders False.
+        """
+
+        # API URL voor huidige weersinformatie op basis van stad
+        api_url = "https://api.openweathermap.org/data/2.5/weather?q=Amsterdam,uk&APPID=a71b7d54c15964ca3068d3a856b2f399"
+
+        try:
+            response = requests.get(api_url)
+            weer_data = response.json()
+
+            # Haal de huidige temperatuur op
+            temperatuur = weer_data['main']['temp']
+
+            # Controleer of er regen is
+            regent = 'rain' in weer_data
+
+            return temperatuur, regent
+
+        except Exception as e:
+            print(f"Fout bij het ophalen van de weerdata: {e}")
+            return None, None
+
     def generate_day_program(self):
         # Haal voorkeuren op van de gebruiker
         data = self.get_IOdata()
         db.connect()
 
-        # Maak query met filters voor lengte, leeftijd, en eventueel overdekte attracties als het weer een rol speelt
+        temperatuur, regent = self.haal_weer_op()
+
+        verblijfsduur = int(data["verblijfsduur"])  # in minuten
+        tijd_resterend = verblijfsduur
+
+        # Query voor attracties
         query = """
-            SELECT naam, type, geschatte_wachttijd, doorlooptijd
+            SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_max_gewicht, attractie_min_leeftijd, overdekt
             FROM voorziening 
-            WHERE type = %s
-            AND actief = 1  
+            WHERE actief = 1  
             AND attractie_min_lengte <= %s
-            AND attractie_max_lengte IS NULL OR attractie_max_lengte >= %s
+            AND (attractie_max_lengte IS NULL OR attractie_max_lengte >= %s)
             AND attractie_min_leeftijd <= %s
-            AND attractie_max_gewicht IS NULL OR attractie_max_gewicht >= %s
-            """
+            AND (attractie_max_gewicht IS NULL OR attractie_max_gewicht >= %s)
+        """
 
         params = (
-         data["attractie_voorkeuren"],
-         int(data["lengte"]),
-         int(data["lengte"]),
-         int(data["leeftijd"]),
-         int(data["gewicht"]),
+            int(data["lengte"]),
+            int(data["lengte"]),
+            int(data["leeftijd"]),
+            int(data["gewicht"])
         )
 
-        results = db.execute_query(query, params)
+        attracties = db.execute_query(query, params)
+
+        # Query voor horeca-gelegenheden op basis van voorkeuren
+        horeca_query = """
+            SELECT naam, type, doorlooptijd, productaanbod
+            FROM voorziening
+            WHERE actief = 1
+            AND type = 'horeca'
+            AND productaanbod IN ({})
+        """.format(','.join(['%s'] * len(data["eten_voorkeuren"])))  # Dynamische lijst van placeholders
+
+        horeca_params = tuple(data["eten_voorkeuren"])
+        horeca_gelegenheden = db.execute_query(horeca_query, horeca_params)
+
+        # Query voor souvenirwinkels (A-TC7)
+        winkel_query = """
+            SELECT naam, type, doorlooptijd, productaanbod
+            FROM voorziening
+            WHERE actief = 1
+            AND type = 'winkel'
+            AND (productaanbod = 'souvenirs' OR productaanbod = 'souveniers')
+        """
+
+        souvenir_winkels = db.execute_query(winkel_query)
+
+        # Query voor winkels met zomerartikelen (A-TC9)
+        zomer_winkel_query = """
+            SELECT naam, type, doorlooptijd, productaanbod
+            FROM voorziening
+            WHERE actief = 1
+            AND type = 'winkel'
+            AND productaanbod = 'zomerartikelen'
+        """
+
+        zomer_winkels = db.execute_query(zomer_winkel_query)
+
+        # Aangepaste query voor winkels met ijs (A-TC10)
+        ijs_winkel_query = """
+            SELECT naam, type, doorlooptijd, productaanbod
+            FROM voorziening
+            WHERE actief = 1
+            AND type = 'winkel'
+            AND productaanbod = 'ijs'
+        """
+
+        ijs_winkels = db.execute_query(ijs_winkel_query)
+
+        # Query voor winkels met regenaccessoires (A-TC11)
+        regen_winkel_query = """
+            SELECT naam, type, doorlooptijd, productaanbod
+            FROM voorziening
+            WHERE actief = 1
+            AND type = 'winkel'
+            AND productaanbod = 'regenaccessoires'
+        """
+
+        regen_winkels = db.execute_query(regen_winkel_query)
+
         db.close()
 
+        dagprogramma = []
 
+        # A-TC9: Voeg een winkel met zomerartikelen toe als de temperatuur > 20 graden
+        if temperatuur > 20 and zomer_winkels:
+            dagprogramma.append(zomer_winkels[0])  # Voeg de eerste zomerwinkel toe
+            tijd_resterend -= zomer_winkels[0]['doorlooptijd']
 
-        return results
+        # A-TC11: Voeg een winkel met regenaccessoires toe als het gaat regenen
+        if regent and regen_winkels:
+            dagprogramma.append(regen_winkels[0])  # Voeg de eerste regenaccessoirewinkel toe
+            tijd_resterend -= regen_winkels[0]['doorlooptijd']
+
+        # Attracties splitsen in voorkeur, lievelings en overige
+        voorkeur_attracties = []
+        lievelings_attracties = []
+        overige_attracties = []
+
+        for attractie in attracties:
+            if attractie['type'].lower() in [voorkeur.lower() for voorkeur in data['attractie_voorkeuren']]:
+                voorkeur_attracties.append(attractie)
+            elif attractie['naam'].lower() in [lievelings.lower() for lievelings in data['lievelings_attracties']]:
+                lievelings_attracties.append(attractie)
+            else:
+                overige_attracties.append(attractie)
+
+        # A-TC3: Voeg voorkeurattracties, lievelingsattracties (maximaal 2x) en overige attracties toe
+        for attractie in voorkeur_attracties:
+            if tijd_resterend >= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd']):
+                dagprogramma.append(attractie)
+                tijd_resterend -= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd'])
+
+        for attractie in lievelings_attracties:
+            # Voeg lievelingsattracties toe, maximaal 2x
+            for _ in range(2):  # Lievelingsattracties mogen maximaal 2 keer
+                if tijd_resterend >= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd']):
+                    dagprogramma.append(attractie)
+                    tijd_resterend -= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd'])
+
+        for attractie in overige_attracties:
+            if tijd_resterend >= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd']):
+                dagprogramma.append(attractie)
+                tijd_resterend -= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd'])
+
+        # A-TC5: Minstens één horecagelegenheid toevoegen gebaseerd op voorkeuren
+        if horeca_gelegenheden:
+            dagprogramma.append(horeca_gelegenheden[0])  # Voeg de eerste gevonden horeca toe
+            tijd_resterend -= horeca_gelegenheden[0]['doorlooptijd']
+
+        # A-TC6: Voeg iedere 2 uur horeca toe bij langer verblijf (>4 uur)
+        if verblijfsduur > 240:  # 4 uur is 240 minuten
+            uren_in_programma = verblijfsduur // 120  # 2 uur = 120 minuten
+            for i in range(uren_in_programma - 1):  # Voeg per 2 uur een horeca toe
+                if horeca_gelegenheden and tijd_resterend >= horeca_gelegenheden[0]['doorlooptijd']:
+                    dagprogramma.append(horeca_gelegenheden[0])
+                    tijd_resterend -= horeca_gelegenheden[0]['doorlooptijd']
+
+        # A-TC7: Voeg souvenirwinkel aan het einde van het programma toe
+        if souvenir_winkels:
+            dagprogramma.append(souvenir_winkels[0])  # Voeg de eerste gevonden souvenirwinkel toe
+
+        # A-TC10: Voeg minimaal één ijswinkel toe als de temperatuur > 20 graden
+        if temperatuur > 20 and ijs_winkels:
+            dagprogramma.append(ijs_winkels[0])  # Voeg de eerste ijswinkel toe
+            tijd_resterend -= ijs_winkels[0]['doorlooptijd']
+
+        return dagprogramma
 
     def opslaan(self):
         data = self.get_IOdata()
 
-        if not self.naam_entry.text() or not self.gender_entry.currentText() or not self.leeftijd_entry.text() or not self.lengte_entry.text() or not self.gewicht_entry.text():
+        if not data["naam"] or not data["gender"] or not data["leeftijd"] or not data["lengte"] or not data["gewicht"] or not data["verblijfsduur"] or not data["attractie_voorkeuren"] or not data["eten_voorkeuren"] or not data["lievelings_attracties"]:
             QMessageBox.warning(self, "Fout", "Er mogen geen lege velden zijn")
             return
 
@@ -214,7 +362,12 @@ class VoorkeurenWindow(QWidget):
                     "attractie_naam": attractie['naam'],  # Change here
                     "type": attractie['type'],  # Change here
                     "geschatte_wachttijd": attractie['geschatte_wachttijd'],  # Change here
-                    "doorlooptijd": attractie['doorlooptijd']  # Change here
+                    "doorlooptijd": attractie['doorlooptijd'],  # Change here
+                    "attractie_min_lengte": attractie['attractie_min_lengte'],
+                    "attractie_max_lengte": attractie['attractie_max_lengte'],
+                    "attractie_max_gewicht": attractie['attractie_max_gewicht'],
+                    "attractie_min_leeftijd": attractie['attractie_min_leeftijd'],
+                    "productaanbod": attractie['productaanbod'],
                 } for attractie in attracties
             ],
             "metadata": {

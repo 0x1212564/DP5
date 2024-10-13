@@ -30,16 +30,16 @@ document.addEventListener('DOMContentLoaded', function() {
             voorkeurenContainer.appendChild(voorkeurDiv);
 
             // Voorzieningen weergeven
-            data.dagprogramma.forEach((dagprogramma, index) => {
+            data.voorzieningen.forEach((voorziening, index) => {
                 const div = document.createElement('li');
                 //div.classList.add('li');
                 div.innerHTML = `
                                  <div class="time"><b>#${index + 1} - ${voorziening.naam} (${voorziening.type})</b></div>
                                     <p>
-                                        Wachttijd: ${dagprogramma.geschatte_wachttijd} minuten (doorlooptijd: ${dagprogramma.doorlooptijd} minuten)<br>
-                                        Minimum-maximum lengte: ${dagprogramma.attractie_min_lengte || 'Geen beperking'} - ${dagprogramma.attractie_max_lengte || 'Geen beperking'}<br>
-                                        Minimum leeftijd: ${dagprogramma.attractie_min_leeftijd || 'Geen beperking'}<br>
-                                        Maximum gewicht: ${dagprogramma.attractie_max_gewicht || 'Geen beperking'}
+                                        Wachttijd: ${voorziening.geschatte_wachttijd} minuten (doorlooptijd: ${voorziening.doorlooptijd} minuten)<br>
+                                        Minimum-maximum lengte: ${voorziening.attractie_min_lengte || 'Geen beperking'} - ${voorziening.attractie_max_lengte || 'Geen beperking'}<br>
+                                        Minimum leeftijd: ${voorziening.attractie_min_leeftijd || 'Geen beperking'}<br>
+                                        Maximum gewicht: ${voorziening.attractie_max_gewicht || 'Geen beperking'}
                                     </p>`;
                 voorzieningenContainer.appendChild(div);
             });

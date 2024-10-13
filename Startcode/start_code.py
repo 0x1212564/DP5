@@ -42,208 +42,208 @@ def haal_weer_op():
 
 def generate_day_program():
     try:
-        bestand_pad = Path(__file__).parent / 'persoonlijke_voorkeuren_bezoeker_1.json'
-        try:
-            with open(bestand_pad) as json_bestand:
-                json_dict = json.load(json_bestand)
-        except FileNotFoundError:
-            print("JSON-bestand niet gevonden!")
-            return
+        # List of JSON files for each visitor (paths to uploaded files)
+        json_files = [
+            Path(__file__).parent / 'persoonlijke_voorkeuren_bezoeker_1.json',
+            Path(__file__).parent / 'persoonlijke_voorkeuren_bezoeker_2.json',
+            Path(__file__).parent / 'persoonlijke_voorkeuren_bezoeker_3.json'
+        ]
 
-        db.connect()
+        # Loop through each file and process it
+        for json_file in json_files:
+            try:
+                with open(json_file) as json_bestand:
+                    json_dict = json.load(json_bestand)
+            except FileNotFoundError:
+                print(f"JSON-bestand {json_file} niet gevonden!")
+                continue
 
-        temperatuur, regent = haal_weer_op()
-        print(temperatuur, regent)
+            db.connect()
 
-        verblijfsduur = int(json_dict["verblijfsduur"])  # in minuten
-        tijd_resterend = verblijfsduur
+            temperatuur, regent = haal_weer_op()
+            print(temperatuur, regent)
 
-        # Query voor attracties
-        query = """
-            SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_max_gewicht, attractie_min_leeftijd, productaanbod
-            FROM voorziening 
-            WHERE actief = 1  
-            AND attractie_min_lengte <= %s
-            AND (attractie_max_lengte IS NULL OR attractie_max_lengte >= %s)
-            AND attractie_min_leeftijd <= %s
-            AND (attractie_max_gewicht IS NULL OR attractie_max_gewicht >= %s)
-        """
+            verblijfsduur = int(json_dict["verblijfsduur"])  # in minuten
+            tijd_resterend = verblijfsduur
 
-        params = (
-            json_dict["lengte"],
-            json_dict["lengte"],
-            json_dict["leeftijd"],
-            json_dict["gewicht"],
-        )
+            # Query voor attracties
+            query = """
+                SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_max_gewicht, attractie_min_leeftijd, productaanbod
+                FROM voorziening 
+                WHERE actief = 1  
+                AND attractie_min_lengte <= %s
+                AND (attractie_max_lengte IS NULL OR attractie_max_lengte >= %s)
+                AND attractie_min_leeftijd <= %s
+                AND (attractie_max_gewicht IS NULL OR attractie_max_gewicht >= %s)
+            """
 
-        attracties = db.execute_query(query, params)
-        print(attracties)
-        # Get the food preferences list from the JSON
-        food_preferences = json_dict.get("voorkeuren_eten", [])  # Default to an empty list if key doesn't exist
+            params = (
+                json_dict["lengte"],
+                json_dict["lengte"],
+                json_dict["leeftijd"],
+                json_dict["gewicht"],
+            )
 
-        # If there are food preferences, adjust the query
-        if food_preferences:
-            # Create a string of '%s' placeholders for each item in the list
-            placeholders = ', '.join(['%s'] * len(food_preferences))
+            attracties = db.execute_query(query, params)
+            print(attracties)
+            # Get the food preferences list from the JSON
+            food_preferences = json_dict.get("voorkeuren_eten", [])  # Default to an empty list if key doesn't exist
 
-            # Update the query to use the IN clause
-            horeca_query = f"""
+            # If there are food preferences, adjust the query
+            if food_preferences:
+                # Create a string of '%s' placeholders for each item in the list
+                placeholders = ', '.join(['%s'] * len(food_preferences))
+
+                # Update the query to use the IN clause
+                horeca_query = f"""
+                    SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_min_leeftijd, attractie_max_gewicht, productaanbod
+                    FROM voorziening
+                    WHERE actief = 1
+                    AND type = 'horeca'
+                    AND productaanbod IN ({placeholders})
+                """
+
+                # Execute the query, passing the food preferences as the parameters
+                horeca_gelegenheden = db.execute_query(horeca_query, tuple(food_preferences))
+
+                print(horeca_gelegenheden)
+            # Query voor souvenirwinkels (A-TC7)
+            winkel_query = """
                 SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_min_leeftijd, attractie_max_gewicht, productaanbod
                 FROM voorziening
                 WHERE actief = 1
-                AND type = 'horeca'
-                AND productaanbod IN ({placeholders})
+                AND type = 'winkel'
+                AND (productaanbod = 'souvenirs' OR productaanbod = 'souveniers')
             """
+            souvenir_winkels = db.execute_query(winkel_query)
 
-            # Execute the query, passing the food preferences as the parameters
-            horeca_gelegenheden = db.execute_query(horeca_query, tuple(food_preferences))
+            # Query voor winkels met zomerartikelen (A-TC9)
+            zomer_winkel_query = """
+                SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_min_leeftijd, attractie_max_gewicht, productaanbod
+                FROM voorziening
+                WHERE actief = 1
+                AND type = 'winkel'
+                AND productaanbod = 'zomerartikelen'
+            """
+            zomer_winkels = db.execute_query(zomer_winkel_query)
 
-            print(horeca_gelegenheden)
-        # Query voor souvenirwinkels (A-TC7)
-        winkel_query = """
-            SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_min_leeftijd, attractie_max_gewicht, productaanbod
-            FROM voorziening
-            WHERE actief = 1
-            AND type = 'winkel'
-            AND (productaanbod = 'souvenirs' OR productaanbod = 'souveniers')
-        """
-        souvenir_winkels = db.execute_query(winkel_query)
+            # Query voor winkels met ijs (A-TC10)
+            ijs_winkel_query = """
+                SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_min_leeftijd, attractie_max_gewicht, productaanbod
+                FROM voorziening
+                WHERE actief = 1
+                AND type = 'winkel'
+                AND productaanbod = 'ijs'
+            """
+            ijs_winkels = db.execute_query(ijs_winkel_query)
 
-        # Query voor winkels met zomerartikelen (A-TC9)
-        zomer_winkel_query = """
-            SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_min_leeftijd, attractie_max_gewicht, productaanbod
-            FROM voorziening
-            WHERE actief = 1
-            AND type = 'winkel'
-            AND productaanbod = 'zomerartikelen'
-        """
-        zomer_winkels = db.execute_query(zomer_winkel_query)
+            # Query voor winkels met regenaccessoires (A-TC11)
+            regen_winkel_query = """
+                SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_min_leeftijd, attractie_max_gewicht, productaanbod
+                FROM voorziening
+                WHERE actief = 1
+                AND type = 'winkel'
+                AND productaanbod = 'regenaccessoires'
+            """
+            regen_winkels = db.execute_query(regen_winkel_query)
 
-        # Query voor winkels met ijs (A-TC10)
-        ijs_winkel_query = """
-            SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_min_leeftijd, attractie_max_gewicht, productaanbod
-            FROM voorziening
-            WHERE actief = 1
-            AND type = 'winkel'
-            AND productaanbod = 'ijs'
-        """
-        ijs_winkels = db.execute_query(ijs_winkel_query)
+            db.close()
 
-        # Query voor winkels met regenaccessoires (A-TC11)
-        regen_winkel_query = """
-            SELECT naam, type, geschatte_wachttijd, doorlooptijd, attractie_min_lengte, attractie_max_lengte, attractie_min_leeftijd, attractie_max_gewicht, productaanbod
-            FROM voorziening
-            WHERE actief = 1
-            AND type = 'winkel'
-            AND productaanbod = 'regenaccessoires'
-        """
-        regen_winkels = db.execute_query(regen_winkel_query)
+            dagprogramma = []
 
-        db.close()
+            # A-TC9: Voeg een winkel met zomerartikelen toe als de temperatuur > 20 graden
+            if json_dict["rekening_houden_met_weer"] and temperatuur > 20 and zomer_winkels:
+                dagprogramma.append(zomer_winkels[0])
+                tijd_resterend -= (zomer_winkels[0]['doorlooptijd'] + zomer_winkels[0]['geschatte_wachttijd'])
 
-        dagprogramma = []
+            if json_dict["rekening_houden_met_weer"] and regent and regen_winkels:
+                dagprogramma.append(regen_winkels[0])
+                tijd_resterend -= (regen_winkels[0]['doorlooptijd'] + regen_winkels[0]['geschatte_wachttijd'])
 
-        # A-TC9: Voeg een winkel met zomerartikelen toe als de temperatuur > 20 graden
-        if json_dict["rekening_houden_met_weer"] and temperatuur > 20 and zomer_winkels:
-            dagprogramma.append(zomer_winkels[0])
-            tijd_resterend -= (zomer_winkels[0]['doorlooptijd'] + zomer_winkels[0]['geschatte_wachttijd'])
+            # Attracties splitsen in voorkeur, lievelings en overige
+            voorkeur_attracties = []
+            lievelings_attracties = []
+            overige_attracties = []
 
-        if json_dict["rekening_houden_met_weer"] and regent and regen_winkels:
-            dagprogramma.append(regen_winkels[0])
-            tijd_resterend -= (regen_winkels[0]['doorlooptijd'] + regen_winkels[0]['geschatte_wachttijd'])
+            for attractie in attracties:
+                if attractie['type'].lower() in [voorkeur.lower() for voorkeur in json_dict['voorkeuren_attractietypes']]:
+                    voorkeur_attracties.append(attractie)
+                elif attractie['naam'].lower() in [lievelings.lower() for lievelings in json_dict['lievelings_attracties']]:
+                    lievelings_attracties.append(attractie)
+                else:
+                    overige_attracties.append(attractie)
 
-        # Attracties splitsen in voorkeur, lievelings en overige
-        voorkeur_attracties = []
-        lievelings_attracties = []
-        overige_attracties = []
-
-        for attractie in attracties:
-            if attractie['type'].lower() in [voorkeur.lower() for voorkeur in json_dict['voorkeuren_attractietypes']]:
-                voorkeur_attracties.append(attractie)
-            elif attractie['naam'].lower() in [lievelings.lower() for lievelings in json_dict['lievelings_attracties']]:
-                lievelings_attracties.append(attractie)
-            else:
-                overige_attracties.append(attractie)
-
-        # Voeg attracties toe op basis van beschikbare tijd
-        for attractie in voorkeur_attracties:
-            if tijd_resterend >= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd']):
-                dagprogramma.append(attractie)
-                tijd_resterend -= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd'])
-
-        for attractie in lievelings_attracties:
-            for _ in range(2):
+            # Voeg attracties toe op basis van beschikbare tijd
+            for attractie in voorkeur_attracties:
                 if tijd_resterend >= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd']):
                     dagprogramma.append(attractie)
                     tijd_resterend -= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd'])
 
-        for attractie in overige_attracties:
-            if tijd_resterend >= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd']):
-                dagprogramma.append(attractie)
-                tijd_resterend -= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd'])
+            for attractie in lievelings_attracties:
+                for _ in range(2):
+                    if tijd_resterend >= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd']):
+                        dagprogramma.append(attractie)
+                        tijd_resterend -= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd'])
 
-        # Voeg horeca toe
-        if horeca_gelegenheden:
-            dagprogramma.append(horeca_gelegenheden[0])
-            tijd_resterend -= horeca_gelegenheden[0]['doorlooptijd']
+            for attractie in overige_attracties:
+                if tijd_resterend >= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd']):
+                    dagprogramma.append(attractie)
+                    tijd_resterend -= (attractie['doorlooptijd'] + attractie['geschatte_wachttijd'])
 
-        if verblijfsduur > 240:  # Voeg extra horeca toe bij langer verblijf
-            uren_in_programma = verblijfsduur // 120
-            for i in range(uren_in_programma - 1):
-                if horeca_gelegenheden and tijd_resterend >= horeca_gelegenheden[0]['doorlooptijd']:
-                    dagprogramma.append(horeca_gelegenheden[0])
-                    tijd_resterend -= horeca_gelegenheden[0]['doorlooptijd']
+            # Voeg horeca toe
+            if horeca_gelegenheden:
+                dagprogramma.append(horeca_gelegenheden[0])
+                tijd_resterend -= horeca_gelegenheden[0]['doorlooptijd']
 
-        if souvenir_winkels:
-            dagprogramma.append(souvenir_winkels[0])
+            if verblijfsduur > 240:  # Voeg extra horeca toe bij langer verblijf
+                uren_in_programma = verblijfsduur // 120
+                for i in range(uren_in_programma - 1):
+                    if horeca_gelegenheden and tijd_resterend >= horeca_gelegenheden[0]['doorlooptijd']:
+                        dagprogramma.append(horeca_gelegenheden[0])
+                        tijd_resterend -= horeca_gelegenheden[0]['doorlooptijd']
 
-        huidige_datum_tijd = datetime.now()
-        datum = huidige_datum_tijd.strftime("%d-%m-%Y")
-        tijd = huidige_datum_tijd.strftime("%H:%M")
+            if souvenir_winkels:
+                dagprogramma.append(souvenir_winkels[0])
 
-        if not attracties:
-            print("Geen attracties gevonden")
-            return
+            huidige_datum_tijd = datetime.now()
+            datum = huidige_datum_tijd.strftime("%d-%m-%Y")
+            tijd = huidige_datum_tijd.strftime("%H:%M")
 
-        dagprogramma = {
-            "voorkeuren": {
-                "naam": json_dict["naam"],
-                "gender": json_dict["gender"],
-                "leeftijd": json_dict["leeftijd"],
-                "lengte": json_dict["lengte"],
-                "gewicht": json_dict["gewicht"],
-                "verblijfsduur": json_dict["verblijfsduur"],
-                "attractie voorkeur(en)": json_dict["voorkeuren_attractietypes"],
-                "eten's voorkeur(en)": json_dict["voorkeuren_eten"],
-                "lieveling's attractie('s)": json_dict["lievelings_attracties"],
-                "Rekening houden met weer": json_dict["rekening_houden_met_weer"],
-            },
-            "dagprogramma": [
-                {
-                    "attractie_naam": attractie["naam"],
+            if not attracties:
+                print("Geen attracties gevonden")
+                return
+
+            dagprogramma = {
+                "voorkeuren": {
+                    "naam": json_dict["naam"],
+                    "attractietypes": json_dict["voorkeuren_attractietypes"],
+                },
+                "voorzieningen": []
+            }
+
+            for attractie in attracties:
+                dagprogramma["voorzieningen"].append({
+                    "naam": attractie["naam"],
                     "type": attractie["type"],
                     "geschatte_wachttijd": attractie["geschatte_wachttijd"],
                     "doorlooptijd": attractie["doorlooptijd"],
-                    "attractie_min_lengte": attractie["attractie_min_lengte"],
-                    "attractie_max_lengte": attractie["attractie_max_lengte"],
-                    "attractie_max_gewicht": attractie["attractie_max_gewicht"],
-                    "attractie_min_leeftijd": attractie["attractie_min_leeftijd"],
-                    "productaanbod": attractie["productaanbod"],
-                } for attractie in dagprogramma  # Fixed reference here
-            ],
-            "metadata": {
-                "aanmeldzuil_id": 23,
-                "transactie_id": 509,
-                "datum_tijd": [datum, tijd]
-            }
-        }
+                    "attractie_min_lengte": attractie.get("attractie_min_lengte"),
+                    "attractie_max_lengte": attractie.get("attractie_max_lengte"),
+                    "attractie_min_leeftijd": attractie.get("attractie_min_leeftijd"),
+                    "attractie_max_gewicht": attractie.get("attractie_max_gewicht"),
+                    "productaanbod": attractie.get("productaanbod")
+                })
 
-        # Sla het programma op in een JSON-bestand
-        with open('persoonlijk_programma_bezoeker_1.json', 'w') as json_bestand:
-            json.dump(dagprogramma, json_bestand, indent=4)
+            # Create a custom filename for each visitor
+            output_file = f'/Users/tim000/Downloads/DP5 - startcode v2/Startcode/persoonlijke_voorkeuren_bezoeker_{json_dict["naam"].replace(" ", "_").lower()}.json'
 
+            # Save the program in a JSON file
+            with open(output_file, 'w') as json_bestand:
+                json.dump(dagprogramma, json_bestand, indent=4)
+
+            print(f"Dagprogramma opgeslagen in {output_file}")
     except Exception as e:
-        print(f"Fout: {e}")
+        print(e)
 
 
 haal_weer_op()
